@@ -31,6 +31,7 @@ so, delete this exception statement from your version.
 */
 
 /* -- xrandr.c -- */
+/* Modified 2026-10-05: handle failed RANDR resize queries. */
 
 #include "x11vnc.h"
 #include "cleanup.h"
@@ -326,7 +327,11 @@ rfbBool xrandr_set_scale_from(int w, int h)
         return FALSE;
 
     X_LOCK;
-    XRRQueryVersion(dpy, &major, &minor);
+    if (!XRRQueryVersion(dpy, &major, &minor)) {
+        rfbLog("RANDR Error: XRRQueryVersion() failed\n");
+        X_UNLOCK;
+        return FALSE;
+    }
     if (major < 1 || (major == 1 && minor < 3)) {
         rfbLog("Need at least RANDR 1.3 to support scaling, only %d.%d available\n", major, minor);
         X_UNLOCK;
@@ -347,6 +352,11 @@ rfbBool xrandr_set_scale_from(int w, int h)
     }
 
     screens = XRRGetScreenResourcesCurrent(dpy, rootwin);
+    if (!screens) {
+        rfbLog("RANDR Error: XRRGetScreenResourcesCurrent() failed\n");
+        X_UNLOCK;
+        return FALSE;
+    }
     if (!screens->ncrtc || !screens->noutput) {
         rfbLog("RANDR Error: XRRGetScreenResourcesCurrent() did not return any crtcs and/or outputs\n");
         XRRFreeScreenResources(screens);
@@ -361,6 +371,12 @@ rfbBool xrandr_set_scale_from(int w, int h)
 
     xrandr = 1;
     outputInfo = XRRGetOutputInfo(dpy, screens, xrandr_output);
+    if (!outputInfo) {
+        rfbLog("RANDR Error: XRRGetOutputInfo() failed\n");
+        XRRFreeScreenResources(screens);
+        X_UNLOCK;
+        return FALSE;
+    }
     xrandr_crtc = outputInfo->crtc;
 
     if (!xrandr_crtc) {
@@ -374,6 +390,13 @@ rfbBool xrandr_set_scale_from(int w, int h)
         return TRUE;
     }
     crtcInfo = XRRGetCrtcInfo(dpy, screens, xrandr_crtc);
+    if (!crtcInfo) {
+        rfbLog("RANDR Error: XRRGetCrtcInfo() failed\n");
+        XRRFreeOutputInfo(outputInfo);
+        XRRFreeScreenResources(screens);
+        X_UNLOCK;
+        return FALSE;
+    }
 
     for (i=0; i<screens->nmode; i++)
     {
