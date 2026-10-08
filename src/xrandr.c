@@ -325,6 +325,11 @@ rfbBool xrandr_set_scale_from(int w, int h)
 
     if (!xrandr_present)
         return FALSE;
+    /* (-1,-1) restores the physical mode; ordinary remote dimensions must
+     * both be positive. Never send a zero/negative size to the X server. */
+    if ((w == -1 && h != -1) ||
+        (w != -1 && (w <= 0 || h <= 0)))
+        return FALSE;
 
     X_LOCK;
     if (!XRRQueryVersion(dpy, &major, &minor)) {
@@ -339,15 +344,14 @@ rfbBool xrandr_set_scale_from(int w, int h)
     }
 
     if (w != -1 && XRRGetScreenSizeRange(dpy, rootwin, &minWidth, &minHeight, &maxWidth, &maxHeight)) {
-        if (w > maxWidth || h > maxHeight) {
-            w = nmin(w, maxWidth);
-            h = nmin(h, maxHeight);
-            rfbLog("Requested size exceeds maximum size of (%dx%d), reduced to (%dx%d)\n", maxWidth, maxHeight, w, h);
-        }
-        if (w < minWidth || h < minHeight) {
-            w = nmax(w, minWidth);
-            h = nmax(h, minHeight);
-            rfbLog("Requested size is smaller than minimum size of (%dx%d), enlarged to (%dx%d)\n", minWidth, minHeight, w, h);
+        if (w < minWidth || h < minHeight || w > maxWidth || h > maxHeight) {
+            /* The RFB success reply promises the exact requested geometry.
+             * Clamping then claiming success leaves the client framebuffer
+             * and the X11 display disagreeing about its size. */
+            rfbLog("RANDR: requested (%dx%d) is outside screen bounds (%dx%d)-(%dx%d)\n",
+                   w, h, minWidth, minHeight, maxWidth, maxHeight);
+            X_UNLOCK;
+            return FALSE;
         }
     }
 
