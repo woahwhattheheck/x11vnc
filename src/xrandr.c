@@ -343,7 +343,13 @@ rfbBool xrandr_set_scale_from(int w, int h)
         return FALSE;
     }
 
-    if (w != -1 && XRRGetScreenSizeRange(dpy, rootwin, &minWidth, &minHeight, &maxWidth, &maxHeight)) {
+    if (w != -1) {
+        if (!XRRGetScreenSizeRange(dpy, rootwin,
+                                   &minWidth, &minHeight, &maxWidth, &maxHeight)) {
+            rfbLog("RANDR Error: XRRGetScreenSizeRange() failed\n");
+            X_UNLOCK;
+            return FALSE;
+        }
         if (w < minWidth || h < minHeight || w > maxWidth || h > maxHeight) {
             /* The RFB success reply promises the exact requested geometry.
              * Clamping then claiming success leaves the client framebuffer
