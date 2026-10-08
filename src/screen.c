@@ -827,16 +827,26 @@ static int set_desktop_size_hook(int width, int height, int numScreens, rfbExtDe
 {
     int i;
 
+    if (!cl || cl->viewOnly) {
+        rfbLog("Denying setDesktopSize request as client is view-only or missing\n");
+        return rfbExtDesktopSize_ResizeProhibited;
+    }
+
+    /* Only a single-screen layout is supported by the RANDR scaling backend.
+     * Validate client-supplied dimensions before dereferencing screens or
+     * passing invalid/partial geometry to XRRSetScreenSize. */
+    if (width <= 0 || height <= 0 || numScreens != 1 || !extDesktopScreens ||
+        extDesktopScreens[0].x != 0 || extDesktopScreens[0].y != 0 ||
+        extDesktopScreens[0].width != width || extDesktopScreens[0].height != height) {
+        rfbLog("Rejecting unsupported SetDesktopSize screen layout\n");
+        return rfbExtDesktopSize_InvalidScreenLayout;
+    }
+
     rfbLog("Received SetDesktopSize message from client requesting (%dx%d) framebuffer with screen configuration:\n", width, height);
     for (i=0; i<numScreens; i++) {
         rfbLog("- id: %d resolution: %dx%d x offset: %d y offset: %d flags: %d\n", extDesktopScreens[i].id, extDesktopScreens[i].width,
                extDesktopScreens[i].height, extDesktopScreens[i].x, extDesktopScreens[i].y, extDesktopScreens[i].flags);
     }
-    if (cl->viewOnly) {
-        rfbLog("Denying setDesktopSize request as client is view-only\n");
-        return rfbExtDesktopSize_ResizeProhibited;
-    }
-
     return xrandr_set_scale_from(width, height) ? rfbExtDesktopSize_Success : rfbExtDesktopSize_InvalidScreenLayout;
 }
 #endif
